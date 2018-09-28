@@ -1,0 +1,125 @@
+<html>
+<head>
+<script>
+let myKey;
+let sharedKey;
+
+async function encrypt(iv, key, data) {
+	const ivB = new TextEncoder().encode(iv);
+	const ivH = await crypto.subtle.digest('SHA-256', ivB); 
+	const keyR = key;
+	const dataB = new TextEncoder().encode(data);
+	return await crypto.subtle.encrypt({name: 'AES-CBC', iv: ivH.slice(0, 16)}, keyR, dataB);
+}
+
+async function decrypt(iv, key, data) {
+	const ivB = new TextEncoder().encode(iv);
+	const ivH = await crypto.subtle.digest('SHA-256', ivB); 
+	const keyR = key;
+	const dataB = await crypto.subtle.decrypt({name: 'AES-CBC', iv: ivH.slice(0, 16)}, keyR, data);
+	return new TextDecoder().decode(dataB);
+}
+
+function bufferToBase64(data) {
+	return btoa(String.fromCharCode.apply(null, new Uint8Array(data)));
+}
+
+function base64ToBuffer(data) {
+	var rawDecoded = atob(data);
+	return new Uint8Array(new ArrayBuffer(rawDecoded.length)).map(function(x, i, a) { return this.charCodeAt(i) }, rawDecoded);
+}
+
+async function generateKey() {
+	return window.crypto.subtle.generateKey({name: "ECDH", namedCurve: "P-256"}, false, ["deriveKey"]);
+}
+
+async function deriveKey(privateKey, publicKey) {
+	return window.crypto.subtle.deriveKey({name: "ECDH", namedCurve: "P-256", public: publicKey}, privateKey, {name: "AES-CBC", length: 256}, false, ["encrypt", "decrypt"]);
+}
+
+async function generateNewKey() {
+	myKey = await generateKey();
+	document.encryption.myPub.value = btoa(JSON.stringify(await window.crypto.subtle.exportKey("jwk", myKey.publicKey)));
+}
+
+async function generateSharedKey() {
+	if (document.encryption.hisPub.value.length < 100) {
+		alert("Input the other party's public key first");
+		return;
+	}
+	let hisPubKey = await window.crypto.subtle.importKey("jwk", JSON.parse(atob(document.encryption.hisPub.value)), {name:"ECDH", namedCurve:"P-256"},false, []);
+	sharedKey = await deriveKey(myKey.privateKey, hisPubKey);
+	alert("Success to generate it!");
+}
+
+function copy(obj) {
+	obj.select();
+	document.execCommand("Copy");
+	obj.selectionEnd = obj.selectionStart;
+	alert("Success to copy it!");
+}
+
+function clearText(obj) {
+	obj.value = "";
+}
+
+async function doEncrypt() {
+	var iv = document.encryption.iv.value;
+	var data = document.encryption.input.value;
+	if (!sharedKey) {
+		alert("Generate shared key first");
+		return;
+	}
+	if (data.length == 0) {
+		alert("Empty input");
+		return;
+	}
+	var result = await encrypt(iv, sharedKey, data);
+	var base64ed = bufferToBase64(result);
+	document.encryption.output.value = base64ed;
+}
+
+async function doDecrypt() {
+	var iv = document.encryption.iv.value;
+	var data = document.encryption.input.value;
+	if (!sharedKey) {
+		alert("Generate shared key first");
+		return;
+	}
+	if (data.length == 0) {
+		alert("Empty input");
+		return;
+	}
+	var unbase64ed = base64ToBuffer(data);
+	var result = await decrypt(iv, sharedKey, unbase64ed);
+	document.encryption.output.value = result;
+}
+</script>
+</head>
+<body onLoad=generateNewKey()>
+<form name=encryption>
+<h1>ECDH & AES</h1>
+<h2>Step 0. Set IV (optional)</h2>
+IV : <input type=text name=iv value="initvector"><br>
+<h2>Step 1. Generate a new key and share it to the other party</h2>
+Your public key : <input type=text name=myPub readonly=readonly> <a href=# onclick=copy(document.encryption.myPub)>Copy!</a><br>
+<h2>Step 2. Get the other party's public key</h2>
+The other party's public key : <input type=text name=hisPub>
+<!--<a href=# onclick=paste(document.encryption.hisPub)>Paste!</a>-->
+<br>
+<h2>Step 3. Get the shared secret key</h2>
+<input type=button value="Generate!" onclick="generateSharedKey()"><br>
+<h2>Step 4. Encrypt via the shared key</h2>
+<input type=button value="Clear" onclick="clearText(document.encryption.input);">
+<!--<input type=button value="Paste" onclick="paste(document.encryption.input)">-->
+<br>
+Input(Either plaintext or ciphertext)<br>
+<textarea name="input" style="width:100%; height:100px;"></textarea><br>
+<input type=button value="Encrypt" onclick="doEncrypt()">
+<input type=button value="Decrypt" onclick="doDecrypt()"><br>
+Output(Either ciphertext or plaintext)<br>
+<textarea name="output" style="width:100%; height:100px;" readonly="readonly"></textarea><br>
+<input type=button value="Copy" onclick="copy(document.encryption.output)"><br>
+</form>
+</body>
+</html>
