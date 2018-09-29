@@ -1,5 +1,6 @@
 <html>
 <head>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <script>
 let myKey;
 let sharedKey;
@@ -52,10 +53,21 @@ async function generateSharedKey() {
 	alert("Success to generate it!");
 }
 
-function copy(obj) {
-	obj.select();
-	document.execCommand("Copy");
-	obj.selectionEnd = obj.selectionStart;
+function copy(el) {
+    var oldContentEditable = el.contentEditable,
+        oldReadOnly = el.readOnly;
+
+    el.contentEditable = true;
+    el.readOnly = false;
+
+	el.select();
+    el.setSelectionRange(0, 999999); // A big number, to cover anything that could be inside the element.
+
+    el.contentEditable = oldContentEditable;
+    el.readOnly = oldReadOnly;
+
+    document.execCommand('copy');
+	el.selectionEnd = el.selectionStart;
 	alert("Success to copy it!");
 }
 
